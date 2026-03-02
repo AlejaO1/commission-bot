@@ -530,10 +530,21 @@ client.once("ready", () => {
     return;
   }
 
-  try {
-    await client.login(process.env.DISCORD_BOT_TOKEN);
-    console.log("✅ Login a Discord ejecutado");
-  } catch (e) {
-    console.error("❌ Falló el login a Discord:", e);
-  }
+  client.on("error", console.error);
+client.on("warn", console.warn);
+
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
+
+console.log("TOKEN PRESENT?", Boolean(process.env.DISCORD_BOT_TOKEN));
+console.log("SCAN_CHANNEL_ID:", process.env.SCAN_CHANNEL_ID);
+console.log("LEADS_CHANNEL_ID:", process.env.LEADS_CHANNEL_ID);
+
+client.login(process.env.DISCORD_BOT_TOKEN)
+  .then(() => console.log("✅ login() OK"))
+  .catch(err => console.error("❌ login() FAILED:", err));
 })();
