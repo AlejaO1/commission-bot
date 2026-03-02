@@ -1,7 +1,7 @@
 // =======================
 // index.js (Render-ready)
 // =======================
-
+console.log("🔥 VERSION NUEVA DEL INDEX ACTIVA");
 // Carga .env SOLO en local (en Render NO hace falta)
 if (process.env.NODE_ENV !== "production") {
   require("dotenv").config();
