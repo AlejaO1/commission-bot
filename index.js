@@ -28,6 +28,19 @@ const {
   EmbedBuilder,
 } = require("discord.js");
 
+function resolveDiscordToken() {
+  const rawToken =
+    process.env.DISCORD_BOT_TOKEN ||
+    process.env.DISCORD_TOKEN ||
+    process.env.BOT_TOKEN ||
+    process.env.TOKEN ||
+    "";
+
+  return rawToken.trim().replace(/^['\"]|['\"]$/g, "");
+}
+
+const DISCORD_TOKEN = resolveDiscordToken();
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -43,6 +56,7 @@ const client = new Client({
 // =======================
 client.on("error", console.error);
 client.on("shardError", console.error);
+client.on("warn", console.warn);
 
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled Rejection:", reason);
@@ -525,26 +539,16 @@ client.once("ready", () => {
 
 // ---------------- LOGIN (con logs) ----------------
 (async () => {
-  if (!process.env.DISCORD_BOT_TOKEN) {
-    console.log("❌ DISCORD_BOT_TOKEN no está definido en Render");
+  if (!DISCORD_TOKEN) {
+    console.log("❌ No se encontró token de Discord. Define DISCORD_BOT_TOKEN, DISCORD_TOKEN, BOT_TOKEN o TOKEN");
     return;
   }
 
-  client.on("error", console.error);
-client.on("warn", console.warn);
+  console.log("TOKEN PRESENT?", Boolean(DISCORD_TOKEN));
+  console.log("SCAN_CHANNEL_ID:", process.env.SCAN_CHANNEL_ID);
+  console.log("LEADS_CHANNEL_ID:", process.env.LEADS_CHANNEL_ID);
 
-process.on("unhandledRejection", (reason) => {
-  console.error("UNHANDLED REJECTION:", reason);
-});
-process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION:", err);
-});
-
-console.log("TOKEN PRESENT?", Boolean(process.env.DISCORD_BOT_TOKEN));
-console.log("SCAN_CHANNEL_ID:", process.env.SCAN_CHANNEL_ID);
-console.log("LEADS_CHANNEL_ID:", process.env.LEADS_CHANNEL_ID);
-
-client.login(process.env.DISCORD_BOT_TOKEN)
-  .then(() => console.log("✅ login() OK"))
-  .catch(err => console.error("❌ login() FAILED:", err));
+  client.login(DISCORD_TOKEN)
+    .then(() => console.log("✅ login() OK"))
+    .catch((err) => console.error("❌ login() FAILED:", err));
 })();
