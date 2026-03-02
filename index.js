@@ -1,18 +1,32 @@
-require("dotenv").config();
+// =======================
+// index.js (Render-ready)
+// =======================
+
+// Carga .env SOLO en local (en Render NO hace falta)
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
 
 const express = require("express");
 const app = express();
 
+// Healthcheck para Render
 app.get("/", (req, res) => {
-  res.send("Bot is alive");
+  res.send("Bot is alive ✅");
 });
 
+// Render expone el puerto en process.env.PORT
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Web server running on port ${PORT}`);
 });
 
-const { Client, GatewayIntentBits, Partials, EmbedBuilder } = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  EmbedBuilder,
+} = require("discord.js");
 
 const client = new Client({
   intents: [
@@ -24,16 +38,32 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
+// =======================
+// Logs de errores (CLAVE)
+// =======================
+client.on("error", console.error);
+client.on("shardError", console.error);
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+});
+
+// =======================
+// ENV VARS
+// =======================
 const LEADS_CHANNEL_ID = process.env.LEADS_CHANNEL_ID || null;
 const SCAN_CHANNEL_ID = process.env.SCAN_CHANNEL_ID;
 
 const CHANNELS = new Set([
   process.env.BUYING_CHANNEL_ID,
   process.env.TRUSTED_BUYING_CHANNEL_ID,
-]);
+].filter(Boolean)); // quita undefined/null
 
 // ---------------- CONFIG ----------------
-
 const TAT_MIN_DAYS = 7;
 const TAT_MAX_DAYS = 14;
 
@@ -129,7 +159,6 @@ const MINIMUMS_USD = {
 };
 
 // ---------------- UTILS ----------------
-
 function normalize(text) {
   return (text || "").toLowerCase();
 }
@@ -198,14 +227,12 @@ function isRealNSFW(text) {
   return false;
 }
 
-// -------- Style logic (realism vs semi realism) --------
+// -------- Style logic --------
 function styleCheck(text) {
   const t = normalize(text);
 
   const hasAllowed = STYLE_ALLOWED.some(s => t.includes(s)) || hasSemiRealism(t);
   const hasDisallowedSimple = STYLE_DISALLOWED.some(s => t.includes(s));
-
-  // "realism" solo si aparece como palabra y NO es semi realism
   const hasRealismOnly = hasWord(t, "realism") && !hasSemiRealism(t);
 
   const hasDisallowed = hasDisallowedSimple || hasRealismOnly;
@@ -362,7 +389,6 @@ function estimateMinimum(text) {
 }
 
 // ---------------- NOTIFY ----------------
-
 async function notifyLead(msg, budget, minAdjusted, extraNote = null) {
   const embed = new EmbedBuilder()
     .setTitle("Nuevo lead detectado")
@@ -381,12 +407,11 @@ async function notifyLead(msg, budget, minAdjusted, extraNote = null) {
 }
 
 // ---------------- MESSAGE CREATE ----------------
-
 client.on("messageCreate", async (msg) => {
   try {
     if (msg.author.bot) return;
 
-    // -------- MANUAL SCAN MODE (#scan) --------
+    // -------- MANUAL SCAN MODE (#scan-channel) --------
     if (msg.channelId === SCAN_CHANNEL_ID) {
       const text = normalize(msg.content);
 
@@ -433,11 +458,9 @@ client.on("messageCreate", async (msg) => {
 
       const okType = containsAny(text, COMMISSION_KEYWORDS);
       const okStyle = STYLE_ALLOWED.some(s => text.includes(s)) || hasSemiRealism(text) || !style.hasStyleInfo;
-
       const flexibleType = !okType && (budget !== null) && okStyle;
 
       const verdict = (okStyle && (okType || flexibleType)) ? "✅ MATCH" : "❌ NO MATCH";
-
       const minAdjusted = estimateMinimum(text);
 
       await notifyLead(
@@ -447,14 +470,11 @@ client.on("messageCreate", async (msg) => {
         `SCAN: ${verdict}${pay.hasPaymentInfo ? " | Payment: OK" : " | Payment: no info"}${tat.days != null ? ` | Deadline: ~${tat.days.toFixed(2)}d` : ""}${style.hasStyleInfo ? " | Style: OK" : " | Style: no info"}`
       );
 
-      await msg.reply(
-        `${verdict}\nBudget: ${budget ?? "?"}${tat.days != null ? ` | Deadline: ~${tat.days.toFixed(2)}d` : ""}`
-      );
-
+      await msg.reply(`${verdict}\nBudget: ${budget ?? "?"}${tat.days != null ? ` | Deadline: ~${tat.days.toFixed(2)}d` : ""}`);
       return;
     }
 
-    // -------- AUTO MODE --------
+    // -------- AUTO MODE (buying channels) --------
     if (!CHANNELS.has(msg.channelId)) return;
 
     const text = normalize(msg.content);
@@ -498,15 +518,22 @@ client.on("messageCreate", async (msg) => {
 });
 
 // ---------------- READY ----------------
-
-// ✅ ESTE ERA EL BUG:
 client.once("ready", () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
+  console.log(`Watching channels: ${[...CHANNELS].join(", ") || "(none)"}`);
 });
 
-// (Opcional) si el token falta, lo verás en logs:
-if (!process.env.DISCORD_BOT_TOKEN) {
-  console.log("❌ DISCORD_BOT_TOKEN no está definido en las env vars");
-}
+// ---------------- LOGIN (con logs) ----------------
+(async () => {
+  if (!process.env.DISCORD_BOT_TOKEN) {
+    console.log("❌ DISCORD_BOT_TOKEN no está definido en Render");
+    return;
+  }
 
-client.login(process.env.DISCORD_BOT_TOKEN);
+  try {
+    await client.login(process.env.DISCORD_BOT_TOKEN);
+    console.log("✅ Login a Discord ejecutado");
+  } catch (e) {
+    console.error("❌ Falló el login a Discord:", e);
+  }
+})();
