@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const app = express();
 
@@ -10,13 +12,7 @@ app.listen(PORT, () => {
   console.log(`Web server running on port ${PORT}`);
 });
 
-require("dotenv").config();
-const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  EmbedBuilder,
-} = require("discord.js");
+const { Client, GatewayIntentBits, Partials, EmbedBuilder } = require("discord.js");
 
 const client = new Client({
   intents: [
@@ -156,53 +152,32 @@ function hasSemiRealism(text) {
   return /\bsemi[-\s]?realism\b/i.test(t) || t.includes("semireal") || t.includes("semirealista");
 }
 
-// -------- NEW: Negative style requests (NO ANIME / NO CARTOON) --------
+// -------- Negative style requests (NO ANIME / NO CARTOON) --------
 function hasForbiddenStyleRequest(text) {
   const t = normalize(text);
 
-  const negativePatterns = [
-    // Anime hard-no
-    "no anime",
-    "not anime",
-    "nothing anime",
-    "dont want anime",
-    "do not want anime",
-    "nothing that looks like anime",
-    "nothing that looks like generic anime",
-    "no generic anime",
-    "no \"anime\"",
-    "no ‘anime’",
-    "no ‘generic anime’",
-    "i will block you", // suele venir con el NO ANIME
-    "i'll block you",
+  const mentionsAnimeNeg =
+    t.includes("no anime") ||
+    t.includes("not anime") ||
+    t.includes("dont want anime") ||
+    t.includes("do not want anime") ||
+    t.includes("nothing that looks like anime") ||
+    t.includes("nothing that looks like generic anime") ||
+    t.includes("no generic anime") ||
+    /\bno\s+anime\b/i.test(t) ||
+    /\bnot\s+anime\b/i.test(t);
 
-    // Cartoony hard-no (por si aparece)
-    "no cartoon",
-    "no cartoons",
-    "not cartoony",
-    "nothing cartoony",
-    "dont want cartoony",
-    "do not want cartoony",
-  ];
+  const mentionsCartoonNeg =
+    t.includes("no cartoon") ||
+    t.includes("no cartoons") ||
+    t.includes("not cartoony") ||
+    t.includes("nothing cartoony") ||
+    t.includes("dont want cartoony") ||
+    t.includes("do not want cartoony") ||
+    /\bno\s+cartoon(s)?\b/i.test(t) ||
+    /\bnot\s+cartoon(y)?\b/i.test(t);
 
-  // Si hay un "NO ANIME" claro, lo marcamos
-  if (negativePatterns.some(p => t.includes(p))) {
-    // Afinamos: solo queremos disparar por anime/cartoony negado.
-    // Si el texto incluye "no anime" o variantes, devuelve true.
-    // Si solo dice "i will block you" pero no menciona anime/cartoony, no lo usamos.
-    const mentionsAnimeNeg = t.includes("no anime") || t.includes("not anime") || t.includes("dont want anime") || t.includes("do not want anime") ||
-      t.includes("nothing that looks like anime") || t.includes("nothing that looks like generic anime") || t.includes("no generic anime");
-    const mentionsCartoonNeg = t.includes("no cartoon") || t.includes("not cartoony") || t.includes("nothing cartoony") ||
-      t.includes("dont want cartoony") || t.includes("do not want cartoony");
-
-    return mentionsAnimeNeg || mentionsCartoonNeg;
-  }
-
-  // También detectamos patrones del tipo "NOT ANIME." (con puntuación)
-  if (/\bnot\s+anime\b/i.test(t) || /\bno\s+anime\b/i.test(t)) return true;
-  if (/\bnot\s+cartoon(y)?\b/i.test(t) || /\bno\s+cartoon(s)?\b/i.test(t)) return true;
-
-  return false;
+  return mentionsAnimeNeg || mentionsCartoonNeg;
 }
 
 // -------- NSFW inteligente --------
@@ -228,7 +203,6 @@ function styleCheck(text) {
   const t = normalize(text);
 
   const hasAllowed = STYLE_ALLOWED.some(s => t.includes(s)) || hasSemiRealism(t);
-
   const hasDisallowedSimple = STYLE_DISALLOWED.some(s => t.includes(s));
 
   // "realism" solo si aparece como palabra y NO es semi realism
@@ -338,7 +312,6 @@ function extractBudgetUSD(text) {
   const paymentPriceRange = tt.match(/\b(payment|pay)\b[^0-9$]{0,40}\$?\s*(\d{1,4})\s*-\s*\$?\s*(\d{1,4})/i);
   if (paymentPriceRange) return Number(paymentPriceRange[3]);
 
-  // NEW: "budget is >$100" o ">100"
   const greaterMatch = tt.match(/\b(?:budget\s*(?:is|=)?\s*)?>\s*\$?\s*(\d{1,4})/i);
   if (greaterMatch) return Number(greaterMatch[1]);
 
@@ -417,7 +390,6 @@ client.on("messageCreate", async (msg) => {
     if (msg.channelId === SCAN_CHANNEL_ID) {
       const text = normalize(msg.content);
 
-      // NEW: Hard "NO ANIME / NO CARTOON" filter
       if (hasForbiddenStyleRequest(text)) {
         await msg.reply("🚫 Ignorado: el cliente explícitamente NO quiere anime/cartoon.");
         return;
@@ -462,7 +434,6 @@ client.on("messageCreate", async (msg) => {
       const okType = containsAny(text, COMMISSION_KEYWORDS);
       const okStyle = STYLE_ALLOWED.some(s => text.includes(s)) || hasSemiRealism(text) || !style.hasStyleInfo;
 
-      // Tipo flexible: si no especifica tipo pero sí hay presupuesto y estilo permitido
       const flexibleType = !okType && (budget !== null) && okStyle;
 
       const verdict = (okStyle && (okType || flexibleType)) ? "✅ MATCH" : "❌ NO MATCH";
@@ -488,9 +459,7 @@ client.on("messageCreate", async (msg) => {
 
     const text = normalize(msg.content);
 
-    // NEW: Hard "NO ANIME / NO CARTOON" filter
     if (hasForbiddenStyleRequest(text)) return;
-
     if (isBackgroundOnly(text)) return;
     if (isRealNSFW(text)) return;
 
@@ -530,8 +499,14 @@ client.on("messageCreate", async (msg) => {
 
 // ---------------- READY ----------------
 
-client.once("clientReady", () => {
+// ✅ ESTE ERA EL BUG:
+client.once("ready", () => {
   console.log(`✅ Bot listo como ${client.user.tag}`);
 });
+
+// (Opcional) si el token falta, lo verás en logs:
+if (!process.env.DISCORD_BOT_TOKEN) {
+  console.log("❌ DISCORD_BOT_TOKEN no está definido en las env vars");
+}
 
 client.login(process.env.DISCORD_BOT_TOKEN);
