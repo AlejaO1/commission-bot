@@ -7,6 +7,8 @@ if (process.env.NODE_ENV !== "production") {
   require("dotenv").config();
 }
 
+const BOT_TOKEN = (process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN || "").trim();
+
 const express = require("express");
 const app = express();
 
@@ -43,6 +45,19 @@ const client = new Client({
 // =======================
 client.on("error", console.error);
 client.on("shardError", console.error);
+client.on("warn", console.warn);
+client.on("shardDisconnect", (event, shardId) => {
+  console.error(`Shard ${shardId} disconnected (code=${event?.code ?? "unknown"})`);
+});
+client.on("shardReconnecting", (shardId) => {
+  console.warn(`Shard ${shardId} reconnecting...`);
+});
+client.on("shardResume", (shardId, replayedEvents) => {
+  console.log(`Shard ${shardId} resumed (${replayedEvents} replayed events)`);
+});
+client.on("invalidated", () => {
+  console.error("Discord session invalidated. The token may have been regenerated.");
+});
 
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled Rejection:", reason);
@@ -519,32 +534,29 @@ client.on("messageCreate", async (msg) => {
 
 // ---------------- READY ----------------
 client.once("ready", () => {
-  console.log(`✅ Bot listo como ${client.user.tag}`);
+  console.log(`Bot ready as ${client.user.tag}`);
+  console.log(`Guilds connected: ${client.guilds.cache.size}`);
   console.log(`Watching channels: ${[...CHANNELS].join(", ") || "(none)"}`);
 });
 
-// ---------------- LOGIN (con logs) ----------------
+// ---------------- LOGIN (with diagnostics) ----------------
 (async () => {
-  if (!process.env.DISCORD_BOT_TOKEN) {
-    console.log("❌ DISCORD_BOT_TOKEN no está definido en Render");
+  if (!BOT_TOKEN) {
+    console.error("Missing bot token. Set DISCORD_BOT_TOKEN (or DISCORD_TOKEN).");
     return;
   }
 
-  client.on("error", console.error);
-client.on("warn", console.warn);
+  if (!BOT_TOKEN.includes(".")) {
+    console.error("Bot token format looks invalid (expected a Discord bot token).");
+    return;
+  }
 
-process.on("unhandledRejection", (reason) => {
-  console.error("UNHANDLED REJECTION:", reason);
-});
-process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION:", err);
-});
+  console.log("Token present: YES");
+  console.log(`Scan channel configured: ${Boolean(SCAN_CHANNEL_ID)}`);
+  console.log(`Leads channel configured: ${Boolean(LEADS_CHANNEL_ID)}`);
+  console.log(`Buying channels configured: ${CHANNELS.size}`);
 
-console.log("TOKEN PRESENT?", Boolean(process.env.DISCORD_BOT_TOKEN));
-console.log("SCAN_CHANNEL_ID:", process.env.SCAN_CHANNEL_ID);
-console.log("LEADS_CHANNEL_ID:", process.env.LEADS_CHANNEL_ID);
-
-client.login(process.env.DISCORD_BOT_TOKEN)
-  .then(() => console.log("✅ login() OK"))
-  .catch(err => console.error("❌ login() FAILED:", err));
+  client.login(BOT_TOKEN)
+    .then(() => console.log("Discord login() successful"))
+    .catch((err) => console.error("Discord login() failed:", err));
 })();
